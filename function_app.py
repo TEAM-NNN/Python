@@ -11,8 +11,8 @@ import json
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
-# モデルとスケーラーのパス（例：PALEビール用）
-OPENWEATHERMAP_API_KEY = "e4e9bafa72e8c8f58e775b0e28f9a875"  # ←ここにAPIキーを設定
+
+OPENWEATHERMAP_API_KEY = "e4e9bafa72e8c8f58e775b0e28f9a875" 
 LOCATION = "Kachidoki,jp"
 
 # 天気OpenWeatherMapから受け取る関数
@@ -86,7 +86,7 @@ def BeerPredictAPI(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         # 使うモデルの種類（ファイル名の接頭辞）
-        beer_types = ["PALE", "IPA", "WEIZEN", "STOUT", "PILSNER", "LAGER"]
+        beer_types = ["PALE", "LAGER", "IPA", "WHITE", "BLACK", "FRUIT"]
         model_dir = "models"  # モデル保存フォルダ
 
         # 天気取得・特徴量作成（共通処理）
