@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import joblib
 from datetime import datetime, timedelta
-import japan_holidays
+import jpholiday
 from collections import defaultdict, Counter
 import json
 
@@ -65,7 +65,7 @@ def get_weather_forecast():
 
 # 天気情報以外の特徴量を追加
 def add_features(df):
-    df["is_holiday"] = df["date"].apply(lambda x: x in japan_holidays.HOLIDAYS)
+    df["is_holiday"] = df["date"].apply(lambda x: x in jpholiday.HOLIDAYS)
     df['is_holiday'] = df['is_holiday'].astype(int)
     df["month"] = df["date"].apply(lambda x: x.month)
     df["weekday"] = df["date"].apply(lambda x: x.weekday())

@@ -2,11 +2,12 @@
 # The Python Worker is managed by Azure Functions platform
 # Manually managing azure-functions-worker may cause unexpected issues
 
-azure-functions
-pandas
-numpy
-joblib
-requests
-scikit-learn
-xgboost
-japan-holidays
+azure-functions==1.13.0
+pandas==2.2.2
+numpy==1.26.4
+joblib==1.4.2
+requests==2.31.0
+scikit-learn==1.4.2
+xgboost==2.0.3
+jpholiday==0.1.6
+
