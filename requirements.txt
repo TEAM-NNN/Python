@@ -3,3 +3,10 @@
 # Manually managing azure-functions-worker may cause unexpected issues
 
 azure-functions
+pandas
+numpy
+joblib
+requests
+scikit-learn
+xgboost
+japan-holidays
