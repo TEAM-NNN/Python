@@ -7,6 +7,7 @@ import joblib
 from datetime import datetime, timedelta
 import japan_holidays
 from collections import defaultdict, Counter
+import json
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
