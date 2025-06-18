@@ -9,7 +9,6 @@ import jpholiday
 from collections import defaultdict, Counter
 import json
 
-
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 
