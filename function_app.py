@@ -48,13 +48,13 @@ def get_weather_forecast():
     for date, values in daily_data.items():
         record = {
             "date": date,
-            "temp_max": max(values["temps"]),
-            "temp_min": min(values["temps"]),
-            "temp_mean": sum(values["temps"]) / len(values["temps"]),
-            "precip_sum": sum(values["rain"]),
-            "wind_mean": sum(values["wind"]) / len(values["wind"]),
-            "pressure_mean": sum(values["pressure"]) / len(values["pressure"]),
-            "humidity_mean": sum(values["humidity"]) / len(values["humidity"]),
+            "最高気温": max(values["temps"]),
+            "最低気温": min(values["temps"]),
+            "平均気温": sum(values["temps"]) / len(values["temps"]),
+            "降水量の合計": sum(values["rain"]),
+            "平均風速": sum(values["wind"]) / len(values["wind"]),
+            "平均気圧": sum(values["pressure"]) / len(values["pressure"]),
+            "平均湿度": sum(values["humidity"]) / len(values["humidity"]),
             "has_晴": int("Clear" in values["weathers"]),
             "has_雲": int("Clouds" in values["weathers"]),
             "has_雷": int("Thunderstorm" in values["weathers"]),
@@ -80,36 +80,60 @@ def preprocess(df, scaler):
     X = scaler.transform(df.drop(columns=["date"]))  # "date"列は予測に使わない
     return X
 
+# APIエンドポイント
 @app.route(route="BeerPredictAPI")
 def BeerPredictAPI(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Predicting beer demand for all beer types.')
 
     try:
-        # 使うモデルの種類（ファイル名の接頭辞）
         beer_types = ["PALE", "LAGER", "IPA", "WHITE", "BLACK", "FRUIT"]
-        model_dir = "models"  # モデル保存フォルダ
+        model_dir = "models"
 
-        # 天気取得・特徴量作成（共通処理）
+        # ビールごとの特徴量定義
+        feature_map = {
+            "PALE": ['weekday_4', 'has_晴', 'month_11', '最高気温', '降水量の合計', 'has_雷', 'weekday_2', '平均湿度', '平均風速'],
+            "LAGER": ['weekday_4', '最高気温', 'has_晴', 'month_7', 'month_9', 'month_8', '降水量の合計', 'weekday_2', 'month_3'],
+            "IPA": ['weekday_4', '最高気温', 'has_晴', 'month_9', 'month_7', '降水量の合計', 'has_雷', 'weekday_2', 'month_3'],
+            "WHITE": ['最高気温', 'weekday_4', 'month_7', 'month_9', 'has_晴', '降水量の合計', 'weekday_2', 'month_3', 'month_2'],
+            "BLACK": ['weekday_4', 'has_晴', 'month_12', 'month_11', '最低気温', '降水量の合計', '平均湿度', 'has_雷', 'weekday_2', '平均風速'],
+            "FRUIT": ['weekday_4', '最高気温', 'has_晴', 'month_9', '降水量の合計']
+        }
+
+        # 天気情報と追加特徴量を取得
         df = get_weather_forecast()
         df = add_features(df)
+
+        # One-hot エンコード（月・曜日）
+        df_encoded = pd.get_dummies(df, columns=["month", "weekday"], prefix=["month", "weekday"], drop_first=True)
+
+        # すべてfloat型に変換
+        for col in df_encoded.columns:
+            if col != "date":
+                df_encoded[col] = df_encoded[col].astype(float)
 
         all_predictions = {}
 
         for beer in beer_types:
             model_path = f"{model_dir}/{beer}_best_model.pkl"
+            features = feature_map[beer]
+
             try:
                 data = joblib.load(model_path)
                 model = data["model"]
                 scaler = data["scaler"]
 
-                # 前処理と推論
-                X_processed = preprocess(df.copy(), scaler)
-                predictions = model.predict(X_processed)
+                # 特徴量がそろっているか確認（なければエラー）
+                missing = [col for col in features if col not in df_encoded.columns]
+                if missing:
+                    raise ValueError(f"欠損している特徴量: {missing}")
 
-                # 結果格納（ビールごとに日付→予測量）
+                X = df_encoded[features]
+                X_scaled = scaler.transform(X)
+                preds = model.predict(X_scaled)
+
                 all_predictions[beer] = {
                     str(date): round(pred, 2)
-                    for date, pred in zip(df["date"], predictions)
+                    for date, pred in zip(df["date"], preds)
                 }
 
             except Exception as e:
