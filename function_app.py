@@ -101,7 +101,7 @@ def predapi(req: func.HttpRequest) -> func.HttpResponse:
         elif weekday == 3:  # 木曜
             target_dates = [today + timedelta(days=i) for i in [1, 2, 4]]
         else:
-            return func.HttpResponse("このAPIは月曜または木曜のみ対応しています", status_code=400)
+            target_dates = [today + timedelta(days=i) for i in [1, 2, 3]]
 
         df = df[df["date"].isin(target_dates)].reset_index(drop=True)
         df = add_features(df)
