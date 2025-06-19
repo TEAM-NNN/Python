@@ -11,7 +11,6 @@ import json
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
-
 OPENWEATHERMAP_API_KEY = "e4e9bafa72e8c8f58e775b0e28f9a875" 
 LOCATION = "Kachidoki,jp"
 
@@ -65,24 +64,16 @@ def get_weather_forecast():
 
 # 天気情報以外の特徴量を追加
 def add_features(df):
-    df["is_holiday"] = df["date"].apply(lambda x: x in jpholiday.HOLIDAYS)
+    df["is_holiday"] = df["date"].apply(jpholiday.is_holiday)
     df['is_holiday'] = df['is_holiday'].astype(int)
     df["month"] = df["date"].apply(lambda x: x.month)
     df["weekday"] = df["date"].apply(lambda x: x.weekday())
     return df
 
-# 前処理
-def preprocess(df, scaler):
-    # カテゴリ変数をOneHotエンコード
-    df = pd.get_dummies(df, columns=['month', 'weekday'], prefix=['month', 'weekday'], drop_first=True)
-    for col in df.columns:
-        df[col] = df[col].astype(float)
-    X = scaler.transform(df.drop(columns=["date"]))  # "date"列は予測に使わない
-    return X
-
 # APIエンドポイント
-@app.route(route="BeerPredictAPI")
-def BeerPredictAPI(req: func.HttpRequest) -> func.HttpResponse:
+@app.function_name(name="predapi") 
+@app.route(route="predapi")
+def predapi(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Predicting beer demand for all beer types.')
 
     try:
@@ -99,56 +90,84 @@ def BeerPredictAPI(req: func.HttpRequest) -> func.HttpResponse:
             "FRUIT": ['weekday_4', '最高気温', 'has_晴', 'month_9', '降水量の合計']
         }
 
-        # 天気情報と追加特徴量を取得
+        # 天気情報取得
         df = get_weather_forecast()
+
+        # 曜日で対象日を抽出
+        today = datetime.now().date()
+        weekday = today.weekday()  # 月=0, 木=3 など
+        if weekday == 0:  # 月曜
+            target_dates = [today + timedelta(days=i) for i in [1, 2, 3]]
+        elif weekday == 3:  # 木曜
+            target_dates = [today + timedelta(days=i) for i in [1, 2, 4]]
+        else:
+            return func.HttpResponse("このAPIは月曜または木曜のみ対応しています", status_code=400)
+
+        df = df[df["date"].isin(target_dates)].reset_index(drop=True)
         df = add_features(df)
 
-        # One-hot エンコード（月・曜日）
-        df_encoded = pd.get_dummies(df, columns=["month", "weekday"], prefix=["month", "weekday"], drop_first=True)
+        # One-hot エンコード
+        df_encoded = pd.get_dummies(df, columns=["month", "weekday"], prefix=["month", "weekday"], drop_first=False)
+        df_encoded.drop(columns=["month_1", "weekday_0"], errors="ignore", inplace=True)
 
-        # すべてfloat型に変換
-        for col in df_encoded.columns:
-            if col != "date":
-                df_encoded[col] = df_encoded[col].astype(float)
+        expected_dummies = [
+            "month_2", "month_3", "month_4", "month_5", "month_6",
+            "month_7", "month_8", "month_9", "month_10", "month_11", "month_12",
+            "weekday_1", "weekday_2", "weekday_3", "weekday_4", "weekday_5"
+        ]
+        for col in expected_dummies:
+            if col not in df_encoded.columns:
+                df_encoded[col] = 0.0
+        df_encoded[expected_dummies] = df_encoded[expected_dummies].astype(float)
 
-        all_predictions = {}
-
+        # モデルを一括ロード
+        models = {}
         for beer in beer_types:
             model_path = f"{model_dir}/{beer}_best_model.pkl"
-            features = feature_map[beer]
-
             try:
                 data = joblib.load(model_path)
-                model = data["model"]
-                scaler = data["scaler"]
-
-                # 特徴量がそろっているか確認（なければエラー）
-                missing = [col for col in features if col not in df_encoded.columns]
-                if missing:
-                    raise ValueError(f"欠損している特徴量: {missing}")
-
-                X = df_encoded[features]
-                X_scaled = scaler.transform(X)
-                preds = model.predict(X_scaled)
-
-                all_predictions[beer] = {
-                    str(date): round(pred, 2)
-                    for date, pred in zip(df["date"], preds)
+                models[beer] = {
+                    "model": data["model"],
+                    "scaler": data["scaler"]
                 }
-
             except Exception as e:
-                logging.warning(f"Could not predict for {beer}: {e}")
-                all_predictions[beer] = "Prediction failed"
+                logging.warning(f"Could not load model for {beer}: {e}")
+                models[beer] = None
+
+        result = []
+        for beer in beer_types:
+            if models[beer] is None:
+                result.append({"beerName": beer.replace("_", ""), "quantity": 0})
+                continue
+
+            features = feature_map[beer]
+            missing = [col for col in features if col not in df_encoded.columns]
+            if missing:
+                return func.HttpResponse(f"{beer} の欠損特徴量: {missing}", status_code=200)
+
+            X = df_encoded[features]
+            X_scaled = models[beer]["scaler"].transform(X)
+            preds = models[beer]["model"].predict(X_scaled)
+            total = int(np.sum(np.ceil(preds)))
+
+            result.append({
+                "beerName": {
+                    "PALE": "ペールエール",
+                    "LAGER": "ラガービール",
+                    "IPA": "IPA",
+                    "WHITE": "ホワイトビール",
+                    "BLACK": "黒ビール",
+                    "FRUIT": "フルーツビール"
+                }[beer],
+                "quantity": total
+            })
 
         return func.HttpResponse(
-            body=json.dumps(all_predictions, ensure_ascii=False),
+            body=json.dumps(result, ensure_ascii=False),
             status_code=200,
             mimetype="application/json"
         )
 
     except Exception as e:
         logging.error(f"Fatal error occurred: {e}")
-        return func.HttpResponse(
-            f"Internal error: {e}",
-            status_code=500
-        )
+        return func.HttpResponse(f"Internal error: {e}", status_code=500)
