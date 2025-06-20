@@ -56,7 +56,8 @@ def get_weather_forecast():
             "平均湿度": sum(values["humidity"]) / len(values["humidity"]),
             "has_晴": int("Clear" in values["weathers"]),
             "has_雲": int("Clouds" in values["weathers"]),
-            "has_雷": int("Thunderstorm" in values["weathers"]),
+            "has_雨": int("Rain" in values["weathers"]),
+            "has_雷": int("Thunderstorm" in values["weathers"])
         }
         records.append(record)
 
@@ -82,11 +83,11 @@ def predapi(req: func.HttpRequest) -> func.HttpResponse:
 
         # ビールごとの特徴量定義
         feature_map = {
-            "PALE": ['weekday_4', 'has_晴', 'month_11', '最高気温', '降水量の合計', 'has_雷', 'weekday_2', '平均湿度', '平均風速'],
-            "LAGER": ['weekday_4', '最高気温', 'has_晴', 'month_7', 'month_9', 'month_8', '降水量の合計', 'weekday_2', 'month_3'],
-            "IPA": ['weekday_4', '最高気温', 'has_晴', 'month_9', 'month_7', '降水量の合計', 'has_雷', 'weekday_2', 'month_3'],
-            "WHITE": ['最高気温', 'weekday_4', 'month_7', 'month_9', 'has_晴', '降水量の合計', 'weekday_2', 'month_3', 'month_2'],
-            "BLACK": ['weekday_4', 'has_晴', 'month_12', 'month_11', '最低気温', '降水量の合計', '平均湿度', 'has_雷', 'weekday_2', '平均風速'],
+            "PALE": ['weekday_4', 'has_晴', 'month_11', '最高気温', '降水量の合計', 'has_雷', 'weekday_2', '平均湿度', '平均風速', 'has_雨'],
+            "LAGER": ['weekday_4', '最高気温', 'has_晴', 'month_7', 'month_9', 'month_8', '降水量の合計', 'weekday_2', 'month_3', 'has_雨'],
+            "IPA": ['weekday_4', '最高気温', 'has_晴', 'month_9', 'month_7', '降水量の合計', 'has_雷', 'weekday_2', 'month_3', 'has_雨'],
+            "WHITE": ['最高気温', 'weekday_4', 'month_7', 'month_9', 'has_晴', '降水量の合計', 'weekday_2', 'month_3', 'month_2', 'has_雨'],
+            "BLACK": ['weekday_4', 'has_晴', 'month_12', 'month_11', '最低気温', '降水量の合計', '平均湿度', 'has_雷', 'weekday_2', '平均風速', 'has_雨'],
             "FRUIT": ['weekday_4', '最高気温', 'has_晴', 'month_9', '降水量の合計']
         }
 
