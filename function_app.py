@@ -153,7 +153,7 @@ def predapi(req: func.HttpRequest) -> func.HttpResponse:
             result.append({
                 "beerName": {
                     "PALE": "ペールエール",
-                    "LAGER": "ラガービール",
+                    "LAGER": "ラガー",
                     "IPA": "IPA",
                     "WHITE": "ホワイトビール",
                     "BLACK": "黒ビール",
@@ -171,3 +171,84 @@ def predapi(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         logging.error(f"Fatal error occurred: {e}")
         return func.HttpResponse(f"Internal error: {e}", status_code=500)
+
+
+
+@app.function_name(name="forecast")
+@app.route(route="forecast")
+def forecast(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('Getting raw weather forecast data.')
+
+    try:
+        # 天気予報データ取得
+        url = f"http://api.openweathermap.org/data/2.5/forecast?q={LOCATION}&appid={OPENWEATHERMAP_API_KEY}&lang=ja&units=metric"
+        response = requests.get(url)
+        data = response.json()
+
+        daily_data = defaultdict(lambda: {
+            "temps": [],
+            "humidity": [],
+            "wind": [],
+            "weathers": []
+        })
+
+        # 対象とする天気のみ
+        valid_weather = {"Clear": "晴", "Clouds": "曇", "Rain": "雨", "Snow": "雪", "Thunderstorm": "雷"}
+
+        # --- 集計処理 ---
+        for item in data["list"]:
+            dt_utc = datetime.strptime(item["dt_txt"], "%Y-%m-%d %H:%M:%S")
+            dt_jst = dt_utc + timedelta(hours=9)
+            date = dt_jst.date()
+
+            weather = item["weather"][0]["main"]
+            if weather not in valid_weather:
+                continue  # 晴・雨・曇 以外は無視
+
+            daily_data[date]["temps"].append(item["main"]["temp"])
+            daily_data[date]["humidity"].append(item["main"]["humidity"])
+            daily_data[date]["wind"].append(item["wind"]["speed"])
+            daily_data[date]["weathers"].append(weather)  # 絞り込まれた天気のみを格納
+
+        # 当日の日付キー
+        today = datetime.now().date()
+
+        # もしデータがなければエラー処理
+        if today not in daily_data or len(daily_data[today]["temps"]) == 0:
+            return func.HttpResponse("No forecast data for today", status_code=404)
+
+        values = daily_data[today]
+
+        # 最頻値の英語天気を取得
+        raw_weather = Counter(values["weathers"]).most_common(1)[0][0]
+        # 日本語に変換
+        translated_weather = valid_weather.get(raw_weather, "不明")
+
+        record = {
+            "date": str(today),
+            "temp_max": max(values["temps"]),
+            "temp_min": min(values["temps"]),
+            "weather_main": translated_weather,
+            "humidity": int(sum(values["humidity"]) / len(values["humidity"])),
+            "wind_speed": sum(values["wind"]) / len(values["wind"])
+}
+
+        df = pd.DataFrame([record])  # ← 一件だけリスト化してDataFrame化
+
+
+        # 日付を文字列に変換（datetimeはJSON化できないため）
+        df["date"] = df["date"].astype(str)
+
+        # JSON形式に変換して返す
+        return func.HttpResponse(
+            body=df.to_json(orient="records", force_ascii=False),
+            status_code=200,
+            mimetype="application/json"
+        )
+
+    except Exception as e:
+        logging.error(f"Error in forecast function: {e}")
+        return func.HttpResponse(
+            f"Internal error: {e}",
+            status_code=500
+        )
