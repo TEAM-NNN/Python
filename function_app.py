@@ -72,8 +72,8 @@ def add_features(df):
     return df
 
 # APIエンドポイント
-@app.function_name(name="predapi") 
-@app.route(route="predapi")
+@app.function_name(name="predict") 
+@app.route(route="predict")
 def predapi(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Predicting beer demand for all beer types.')
 
